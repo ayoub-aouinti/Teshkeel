@@ -31,10 +31,19 @@ function splitIntoChunks(text) {
 
 // ─── Google Gemini ────────────────────────────────────────────────────────────
 
-const GEMINI_MODELS = [
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
+// Try multiple model + endpoint + auth combinations to handle key format variations
+const GEMINI_ATTEMPTS = [
+  { ver: 'v1beta', model: 'gemini-2.0-flash',         bearer: false },
+  { ver: 'v1beta', model: 'gemini-2.0-flash',         bearer: true  },
+  { ver: 'v1beta', model: 'gemini-2.0-flash-exp',     bearer: false },
+  { ver: 'v1beta', model: 'gemini-2.0-flash-exp',     bearer: true  },
+  { ver: 'v1beta', model: 'gemini-1.5-flash',         bearer: false },
+  { ver: 'v1beta', model: 'gemini-1.5-flash',         bearer: true  },
+  { ver: 'v1beta', model: 'gemini-1.5-flash-latest',  bearer: true  },
+  { ver: 'v1beta', model: 'gemini-pro',               bearer: false },
+  { ver: 'v1beta', model: 'gemini-pro',               bearer: true  },
+  { ver: 'v1',     model: 'gemini-1.0-pro-001',       bearer: false },
+  { ver: 'v1',     model: 'gemini-1.0-pro-001',       bearer: true  },
 ];
 
 async function tashkeelChunkGemini(chunk, apiKey) {
@@ -42,14 +51,17 @@ async function tashkeelChunkGemini(chunk, apiKey) {
     'أنت متخصص في اللغة العربية. أضف التشكيل الكامل والصحيح للنص التالي. ' +
     'أعد النص المُشكَّل فقط بدون أي تعليق أو مقدمة:\n\n' + chunk;
 
-  for (const model of GEMINI_MODELS) {
-    const url =
-      `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+  for (const { ver, model, bearer } of GEMINI_ATTEMPTS) {
+    const urlKey = bearer ? '' : `?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent${urlKey}`;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (bearer) headers['Authorization'] = `Bearer ${apiKey}`;
 
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
@@ -60,22 +72,21 @@ async function tashkeelChunkGemini(chunk, apiKey) {
       const body = await res.text();
 
       if (!res.ok) {
-        console.warn(`[gemini] ${model} → ${res.status}: ${body.slice(0, 300)}`);
+        console.warn(`[gemini] ${ver}/${model} bearer=${bearer} → ${res.status}`);
         continue;
       }
 
       const data = JSON.parse(body);
       const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (result?.trim()) {
-        console.log(`[gemini] success with ${model}`);
+        console.log(`[gemini] success: ${ver}/${model} bearer=${bearer}`);
         return result.trim();
       }
-      console.warn(`[gemini] ${model} returned empty result`);
     } catch (e) {
-      console.warn(`[gemini] ${model} threw: ${e.message}`);
+      console.warn(`[gemini] ${ver}/${model} bearer=${bearer} threw: ${e.message}`);
     }
   }
-  throw new Error('All Gemini models failed');
+  throw new Error('All Gemini attempts failed');
 }
 
 async function tashkeelWithGemini(text, apiKey) {
