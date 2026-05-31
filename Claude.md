@@ -1,4 +1,4 @@
-# Tashkeel
+# Al-Techkeel
 
 ## Stack
 - [ex: React + TypeScript + Tailwind]

@@ -86,7 +86,7 @@ export default function App() {
       </main>
 
       <footer className="text-center py-4 text-slate-400 text-xs font-sans border-t border-slate-100">
-        تشكيل — أداة تشكيل النصوص العربية 
+        التشكيل (Al-Techkeel) — أداة تشكيل النصوص العربية
       </footer>
     </div>
   )

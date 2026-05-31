@@ -7,8 +7,8 @@ export default function Header() {
             <span className="font-arabic text-navy-900 font-bold text-xl leading-none">ت</span>
           </div>
           <div>
-            <h1 className="font-arabic text-2xl font-bold text-gold-400 leading-none">تشكيل</h1>
-            <p className="text-slate-400 text-xs mt-0.5 font-sans tracking-wide">Arabic Diacritization Tool</p>
+            <h1 className="font-arabic text-2xl font-bold text-gold-400 leading-none">التشكيل</h1>
+            <p className="text-slate-400 text-xs mt-0.5 font-sans tracking-wide">Al-Techkeel · Arabic Diacritization</p>
           </div>
         </div>
         <div className="text-slate-500 text-sm font-sans hidden sm:block">
