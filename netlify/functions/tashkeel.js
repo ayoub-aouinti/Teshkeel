@@ -31,67 +31,68 @@ function splitIntoChunks(text) {
 
 // ─── Google Gemini ────────────────────────────────────────────────────────────
 
-// Try multiple model + endpoint + auth combinations to handle key format variations
-const GEMINI_ATTEMPTS = [
-  { ver: 'v1beta', model: 'gemini-2.0-flash',         bearer: false },
-  { ver: 'v1beta', model: 'gemini-2.0-flash',         bearer: true  },
-  { ver: 'v1beta', model: 'gemini-2.0-flash-exp',     bearer: false },
-  { ver: 'v1beta', model: 'gemini-2.0-flash-exp',     bearer: true  },
-  { ver: 'v1beta', model: 'gemini-1.5-flash',         bearer: false },
-  { ver: 'v1beta', model: 'gemini-1.5-flash',         bearer: true  },
-  { ver: 'v1beta', model: 'gemini-1.5-flash-latest',  bearer: true  },
-  { ver: 'v1beta', model: 'gemini-pro',               bearer: false },
-  { ver: 'v1beta', model: 'gemini-pro',               bearer: true  },
-  { ver: 'v1',     model: 'gemini-1.0-pro-001',       bearer: false },
-  { ver: 'v1',     model: 'gemini-1.0-pro-001',       bearer: true  },
-];
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 async function tashkeelChunkGemini(chunk, apiKey) {
   const prompt =
     'أنت متخصص في اللغة العربية. أضف التشكيل الكامل والصحيح للنص التالي. ' +
     'أعد النص المُشكَّل فقط بدون أي تعليق أو مقدمة:\n\n' + chunk;
 
-  for (const { ver, model, bearer } of GEMINI_ATTEMPTS) {
-    const urlKey = bearer ? '' : `?key=${apiKey}`;
-    const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent${urlKey}`;
+  for (const model of GEMINI_MODELS) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (bearer) headers['Authorization'] = `Bearer ${apiKey}`;
+    // Retry up to 3 times on rate-limit (429)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+          }),
+          signal: AbortSignal.timeout(20000),
+        });
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
+        if (res.status === 429) {
+          const wait = attempt * 2000;
+          console.warn(`[gemini] ${model} rate-limited, retrying in ${wait}ms (attempt ${attempt})`);
+          await sleep(wait);
+          continue;
+        }
 
-      const body = await res.text();
+        if (!res.ok) {
+          console.warn(`[gemini] ${model} → ${res.status}, trying next model`);
+          break; // try next model, not next retry
+        }
 
-      if (!res.ok) {
-        console.warn(`[gemini] ${ver}/${model} bearer=${bearer} → ${res.status}`);
-        continue;
+        const data = await res.json();
+        const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (result?.trim()) {
+          console.log(`[gemini] success with ${model}`);
+          return result.trim();
+        }
+      } catch (e) {
+        console.warn(`[gemini] ${model} attempt ${attempt} threw: ${e.message}`);
       }
-
-      const data = JSON.parse(body);
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (result?.trim()) {
-        console.log(`[gemini] success: ${ver}/${model} bearer=${bearer}`);
-        return result.trim();
-      }
-    } catch (e) {
-      console.warn(`[gemini] ${ver}/${model} bearer=${bearer} threw: ${e.message}`);
     }
   }
-  throw new Error('All Gemini attempts failed');
+  throw new Error('All Gemini models failed');
 }
 
+// Sequential processing to respect free-tier rate limits (15 RPM)
 async function tashkeelWithGemini(text, apiKey) {
   const chunks = splitIntoChunks(text);
-  const results = await Promise.all(chunks.map((c) => tashkeelChunkGemini(c, apiKey)));
+  const results = [];
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0) await sleep(1500); // 1.5s gap between chunks → ~40 RPM max
+    results.push(await tashkeelChunkGemini(chunks[i], apiKey));
+  }
   return results.join('\n');
 }
 
