@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    background-color: #faf9f6;
+    color: #1e1b18;
+  }
+}
+
+@layer utilities {
+  .font-arabic {
+    font-family: 'Amiri', Georgia, serif;
+  }
+
+  .text-arabic {
+    direction: rtl;
+    text-align: right;
+    font-family: 'Amiri', Georgia, serif;
+    line-height: 3.2;
+    font-size: 1.35rem;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #d4af37 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #d4af37;
+    border-radius: 3px;
+  }
+}
+
+/* Drag-over highlight */
+.drag-over {
+  border-color: #c19a2e !important;
+  background-color: #fdf8ec !important;
+}
+
+/* Arabic tashkeel textarea */
+.tashkeel-area {
+  direction: rtl;
+  text-align: right;
+  font-family: 'Amiri', Georgia, serif;
+  font-size: 1.1rem;
+  line-height: 2.6;
+  resize: none;
+  outline: none;
+  width: 100%;
+  min-height: 200px;
+  border: none;
+  background: transparent;
+  color: #1e1b18;
+  overflow: hidden;
+}
+
+.tashkeel-area:focus {
+  outline: none;
+}
+
+/* Spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
