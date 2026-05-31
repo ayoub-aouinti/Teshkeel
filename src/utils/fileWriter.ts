@@ -30,12 +30,11 @@ export async function downloadDocx(text: string, baseName: string) {
         children: [
           new TextRun({
             text: line,
-            rightToLeft: true,
             font: 'Amiri',
             size: 28,
           }),
         ],
-        rightToLeft: true,
+        bidirectional: true,
         alignment: AlignmentType.RIGHT,
         spacing: { line: 480 },
       }),
