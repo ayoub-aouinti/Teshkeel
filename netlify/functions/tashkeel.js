@@ -2,12 +2,8 @@
 
 /**
  * Netlify serverless function for Arabic tashkeel.
- *
- * Priority order (first key found wins):
- *  1. Google Gemini API  — FREE, set GOOGLE_AI_API_KEY in Netlify env vars
- *                          Get a free key at: https://aistudio.google.com
- *  2. Anthropic Claude   — set ANTHROPIC_API_KEY (has a free trial)
- *  3. Mishkal web API    — free fallback, unreliable
+ * Priority: Google Gemini (free) → Anthropic Claude → Mishkal web API
+ * Set GOOGLE_AI_API_KEY in Netlify env vars (free from aistudio.google.com)
  */
 
 const CHUNK_CHARS = 2000;
@@ -19,7 +15,6 @@ function splitIntoChunks(text) {
   const chunks = [];
   let current = [];
   let size = 0;
-
   for (const para of paragraphs) {
     if (size + para.length > CHUNK_CHARS && current.length > 0) {
       chunks.push(current.join('\n'));
@@ -34,36 +29,53 @@ function splitIntoChunks(text) {
   return chunks.length > 0 ? chunks : [text];
 }
 
-const TASHKEEL_PROMPT =
-  'أنت متخصص في اللغة العربية. مهمتك الوحيدة هي إضافة التشكيل الكامل والصحيح للنص العربي. ' +
-  'أعد النص المُشكَّل فقط، دون أي تعليق أو مقدمة أو خاتمة.';
+// ─── Google Gemini ────────────────────────────────────────────────────────────
 
-// ─── Google Gemini (free) ─────────────────────────────────────────────────────
+const GEMINI_MODELS = [
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+];
 
 async function tashkeelChunkGemini(chunk, apiKey) {
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const prompt =
+    'أنت متخصص في اللغة العربية. أضف التشكيل الكامل والصحيح للنص التالي. ' +
+    'أعد النص المُشكَّل فقط بدون أي تعليق أو مقدمة:\n\n' + chunk;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: TASHKEEL_PROMPT }] },
-      contents: [{ parts: [{ text: `أضف التشكيل لهذا النص:\n\n${chunk}` }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-    }),
-    signal: AbortSignal.timeout(25000),
-  });
+  for (const model of GEMINI_MODELS) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => res.statusText);
-    throw new Error(`Gemini ${res.status}: ${body}`);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      const body = await res.text();
+
+      if (!res.ok) {
+        console.warn(`[gemini] ${model} → ${res.status}: ${body.slice(0, 300)}`);
+        continue;
+      }
+
+      const data = JSON.parse(body);
+      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (result?.trim()) {
+        console.log(`[gemini] success with ${model}`);
+        return result.trim();
+      }
+      console.warn(`[gemini] ${model} returned empty result`);
+    } catch (e) {
+      console.warn(`[gemini] ${model} threw: ${e.message}`);
+    }
   }
-
-  const data = await res.json();
-  const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!result?.trim()) throw new Error('Empty Gemini response');
-  return result.trim();
+  throw new Error('All Gemini models failed');
 }
 
 async function tashkeelWithGemini(text, apiKey) {
@@ -72,7 +84,7 @@ async function tashkeelWithGemini(text, apiKey) {
   return results.join('\n');
 }
 
-// ─── Anthropic Claude (fallback) ──────────────────────────────────────────────
+// ─── Anthropic Claude ─────────────────────────────────────────────────────────
 
 async function tashkeelChunkClaude(chunk, apiKey) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -85,10 +97,13 @@ async function tashkeelChunkClaude(chunk, apiKey) {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
-      system: TASHKEEL_PROMPT,
-      messages: [{ role: 'user', content: `أضف التشكيل لهذا النص:\n\n${chunk}` }],
+      messages: [{
+        role: 'user',
+        content:
+          'أضف التشكيل الكامل للنص التالي. أعد النص المُشكَّل فقط بدون أي تعليق:\n\n' + chunk,
+      }],
     }),
-    signal: AbortSignal.timeout(25000),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!res.ok) throw new Error(`Claude ${res.status}`);
@@ -104,7 +119,7 @@ async function tashkeelWithClaude(text, apiKey) {
   return results.join('\n');
 }
 
-// ─── Mishkal web API (last resort) ───────────────────────────────────────────
+// ─── Mishkal web API ──────────────────────────────────────────────────────────
 
 async function tashkeelWithMishkal(text) {
   const endpoints = [
@@ -122,7 +137,6 @@ async function tashkeelWithMishkal(text) {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) continue;
-
       const ct = res.headers.get('content-type') ?? '';
       if (ct.includes('application/json')) {
         const data = await res.json();
@@ -135,7 +149,7 @@ async function tashkeelWithMishkal(text) {
       }
     } catch { continue; }
   }
-  throw new Error('Mishkal endpoints unavailable');
+  throw new Error('Mishkal unavailable');
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -155,8 +169,12 @@ exports.handler = async (event) => {
   const text = (params.get('text') ?? '').trim();
   if (!text) return { statusCode: 400, headers, body: JSON.stringify({ error: 'النص فارغ' }) };
 
-  // 1 — Google Gemini (free)
   const geminiKey = process.env.GOOGLE_AI_API_KEY;
+  const claudeKey = process.env.ANTHROPIC_API_KEY;
+
+  console.log(`[tashkeel] keys present → gemini:${!!geminiKey} claude:${!!claudeKey}`);
+
+  // 1 — Google Gemini (free)
   if (geminiKey) {
     try {
       const result = await tashkeelWithGemini(text, geminiKey);
@@ -164,10 +182,11 @@ exports.handler = async (event) => {
     } catch (e) {
       console.warn('[tashkeel] Gemini failed:', e.message);
     }
+  } else {
+    console.warn('[tashkeel] GOOGLE_AI_API_KEY not set');
   }
 
   // 2 — Anthropic Claude
-  const claudeKey = process.env.ANTHROPIC_API_KEY;
   if (claudeKey) {
     try {
       const result = await tashkeelWithClaude(text, claudeKey);
@@ -186,8 +205,7 @@ exports.handler = async (event) => {
       statusCode: 503,
       headers,
       body: JSON.stringify({
-        error:
-          'تعذّر التشكيل. أضف مفتاح GOOGLE_AI_API_KEY مجاناً من aistudio.google.com في إعدادات Netlify.',
+        error: 'تعذّر التشكيل. يرجى التحقق من سجلات Netlify Functions لمزيد من التفاصيل.',
       }),
     };
   }
