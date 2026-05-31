@@ -1,0 +1,17 @@
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+  functions = "netlify/functions"
+
+# /api/tashkeel  →  Netlify serverless function (production)
+[[redirects]]
+  from   = "/api/tashkeel"
+  to     = "/.netlify/functions/tashkeel"
+  status = 200
+  force  = true
+
+# SPA fallback — every other route serves index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

@@ -1,1 +1,1 @@
-mishkal>=2.1.0
+mishkal==0.4.1
