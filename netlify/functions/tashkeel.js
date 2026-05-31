@@ -44,7 +44,7 @@ async function tashkeelChunkGemini(chunk, apiKey) {
 
   for (const model of GEMINI_MODELS) {
     const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
 
     try {
       const res = await fetch(url, {
