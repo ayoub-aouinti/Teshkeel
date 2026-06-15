@@ -1,4 +1,11 @@
-export default function Header() {
+import UserMenu from './UserMenu'
+
+interface Props {
+  onDashboard: () => void
+  onLogin: () => void
+}
+
+export default function Header({ onDashboard, onLogin }: Props) {
   return (
     <header className="bg-navy-800 text-white shadow-lg">
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -11,9 +18,7 @@ export default function Header() {
             <p className="text-slate-400 text-xs mt-0.5 font-sans tracking-wide">Al-Techkeel · Arabic Diacritization</p>
           </div>
         </div>
-        <div className="text-slate-500 text-sm font-sans hidden sm:block">
-          أداة إضافة التشكيل للنصوص العربية
-        </div>
+        <UserMenu onDashboard={onDashboard} onLogin={onLogin} />
       </div>
     </header>
   )
