@@ -130,18 +130,23 @@ async function tashkeelWithMishkal(text) {
 
 // ─── Vercel handler ───────────────────────────────────────────────────────────
 
-function readBody(req) {
-  // Vercel sometimes pre-parses the body — handle both cases
-  if (req.body !== undefined) {
-    const b = req.body;
-    return Promise.resolve(typeof b === 'string' ? b : JSON.stringify(b));
+async function extractText(req) {
+  // Case 1: Vercel pre-parsed as object { text: '...' }
+  if (req.body !== null && typeof req.body === 'object') {
+    return String(req.body.text ?? '').trim();
   }
-  return new Promise((resolve, reject) => {
+  // Case 2: already a string (url-encoded or raw)
+  if (typeof req.body === 'string') {
+    return (new URLSearchParams(req.body).get('text') ?? '').trim();
+  }
+  // Case 3: read raw stream
+  const raw = await new Promise((resolve, reject) => {
     let data = '';
     req.on('data', (chunk) => { data += chunk.toString(); });
     req.on('end', () => resolve(data));
     req.on('error', reject);
   });
+  return (new URLSearchParams(raw).get('text') ?? '').trim();
 }
 
 export default async function handler(req, res) {
@@ -152,9 +157,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const rawBody = await readBody(req);
-    const params = new URLSearchParams(rawBody);
-    const text = (params.get('text') ?? '').trim();
+    const text = await extractText(req);
     if (!text) return res.status(400).json({ error: 'النص فارغ' });
 
     const groqKey   = process.env.GROQ_API_KEY;
