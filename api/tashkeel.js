@@ -1,5 +1,3 @@
-'use strict';
-
 const CHUNK_CHARS = 2000;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -146,7 +144,7 @@ function readBody(req) {
   });
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -187,4 +185,4 @@ module.exports = async (req, res) => {
     console.error('[tashkeel] unexpected error:', e);
     return res.status(500).json({ error: `خطأ داخلي: ${e.message}` });
   }
-};
+}
