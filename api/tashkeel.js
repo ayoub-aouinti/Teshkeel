@@ -133,6 +133,11 @@ async function tashkeelWithMishkal(text) {
 // ─── Vercel handler ───────────────────────────────────────────────────────────
 
 function readBody(req) {
+  // Vercel sometimes pre-parses the body — handle both cases
+  if (req.body !== undefined) {
+    const b = req.body;
+    return Promise.resolve(typeof b === 'string' ? b : JSON.stringify(b));
+  }
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', (chunk) => { data += chunk.toString(); });
@@ -148,33 +153,38 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  const rawBody = await readBody(req);
-  const params = new URLSearchParams(rawBody);
-  const text = (params.get('text') ?? '').trim();
-  if (!text) return res.status(400).json({ error: 'النص فارغ' });
-
-  const groqKey   = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GOOGLE_AI_API_KEY;
-
-  console.log(`[tashkeel] groq:${!!groqKey} gemini:${!!geminiKey}`);
-
-  if (groqKey) {
-    try {
-      return res.status(200).json({ result: await tashkeelWithGroq(text, groqKey) });
-    } catch (e) { console.warn('[tashkeel] Groq failed:', e.message); }
-  }
-
-  if (geminiKey) {
-    try {
-      return res.status(200).json({ result: await tashkeelWithGemini(text, geminiKey) });
-    } catch (e) { console.warn('[tashkeel] Gemini failed:', e.message); }
-  }
-
   try {
-    return res.status(200).json({ result: await tashkeelWithMishkal(text) });
-  } catch {
-    return res.status(503).json({
-      error: 'تعذّر التشكيل. أضف مفتاح GROQ_API_KEY مجاناً من console.groq.com في إعدادات Vercel.',
-    });
+    const rawBody = await readBody(req);
+    const params = new URLSearchParams(rawBody);
+    const text = (params.get('text') ?? '').trim();
+    if (!text) return res.status(400).json({ error: 'النص فارغ' });
+
+    const groqKey   = process.env.GROQ_API_KEY;
+    const geminiKey = process.env.GOOGLE_AI_API_KEY;
+
+    console.log(`[tashkeel] groq:${!!groqKey} gemini:${!!geminiKey}`);
+
+    if (groqKey) {
+      try {
+        return res.status(200).json({ result: await tashkeelWithGroq(text, groqKey) });
+      } catch (e) { console.warn('[tashkeel] Groq failed:', e.message); }
+    }
+
+    if (geminiKey) {
+      try {
+        return res.status(200).json({ result: await tashkeelWithGemini(text, geminiKey) });
+      } catch (e) { console.warn('[tashkeel] Gemini failed:', e.message); }
+    }
+
+    try {
+      return res.status(200).json({ result: await tashkeelWithMishkal(text) });
+    } catch {
+      return res.status(503).json({
+        error: 'تعذّر التشكيل. أضف مفتاح GROQ_API_KEY مجاناً من console.groq.com في إعدادات Vercel.',
+      });
+    }
+  } catch (e) {
+    console.error('[tashkeel] unexpected error:', e);
+    return res.status(500).json({ error: `خطأ داخلي: ${e.message}` });
   }
 };
